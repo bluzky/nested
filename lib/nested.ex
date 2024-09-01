@@ -1,5 +1,8 @@
 defmodule Nested do
-  @moduledoc false
+  @moduledoc """
+  Nested provides functions to access nested data in map and list with ease
+  """
+
   @doc """
   Query data nested in map and list, return default if path not exist
 

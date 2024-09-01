@@ -4,8 +4,8 @@ defmodule Nested.MixProject do
   def project do
     [
       app: :nested2,
-      version: "0.1.0",
-      elixir: "~> 1.16",
+      version: "0.1.1",
+      elixir: "~> 1.13",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       package: package(),
