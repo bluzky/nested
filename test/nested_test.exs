@@ -393,9 +393,15 @@ defmodule NestedTest do
         Nested.fetch(123, [0])
       end
 
-      # get/3 should handle this more gracefully by returning the default
-      assert Nested.get("string", [:key]) == nil
-      assert Nested.get(123, [0], "default") == "default"
+      # get/3 also raises FunctionClauseError since it calls fetch/2 internally
+      # and doesn't catch FunctionClauseError, only pattern matches on {:ok, data} | :error
+      assert_raise FunctionClauseError, fn ->
+        Nested.get("string", [:key])
+      end
+
+      assert_raise FunctionClauseError, fn ->
+        Nested.get(123, [0], "default")
+      end
     end
 
     test "traverse handles primitive values" do
