@@ -55,7 +55,58 @@ defmodule Nested do
       Nested.extract(data, [:users, "*", :name])
       #=> ["Alice", "Bob"]
 
+  ## Query String Syntax
+
+  For convenience, you can also use query strings with `Nested.key/2`:
+
+      # Basic dot notation
+      Nested.get(data, Nested.key("users.0.name"))
+      #=> "Alice"
+
+      # Bracket filtering
+      Nested.get(data, Nested.key("users[active=true].name"))
+      #=> "Alice"
+
+      # Extract with wildcards
+      Nested.extract(data, Nested.key("users[*].name"))
+      #=> ["Alice", "Bob"]
+
+      # String keys for JSON data
+      Nested.get(json_data, Nested.key("users.0.name", :string))
+
   """
+
+  @doc """
+  Parse a query string into a path list for use with other Nested functions.
+
+  This function converts a human-readable query string into the path format
+  used by `get/3`, `fetch/2`, `extract/2`, and other functions.
+
+  ## Parameters
+
+  - `query_string` - String representation of the path
+  - `key_type` - Default type for dot notation keys (`:atom` or `:string`, defaults to `:atom`)
+
+  ## Examples
+
+      # Basic usage
+      Nested.key("users.0.name")
+      #=> [:users, 0, :name]
+
+      # String keys mode
+      Nested.key("config.database.host", :string)  
+      #=> ["config", "database", "host"]
+
+      # Use with other functions
+      path = Nested.key("users[active=true].0.name")
+      Nested.get(data, path)
+
+  For full syntax documentation, see `Nested.QueryParser.parse/2`.
+  """
+  @spec key(String.t(), :atom | :string) :: list()
+  def key(query_string, key_type \\ :atom) do
+    Nested.QueryParser.parse(query_string, key_type)
+  end
 
   @doc """
   Safely query data nested in maps and lists, returning a default value if the path doesn't exist.

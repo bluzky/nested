@@ -373,6 +373,64 @@ defmodule NestedTest do
     end
   end
 
+  describe "key/2 query string parsing" do
+    test "basic query string parsing" do
+      assert Nested.key("users.0.name") == [:users, 0, :name]
+      assert Nested.key("config.database.host", :string) == ["config", "database", "host"]
+    end
+
+    test "integration with get/3" do
+      data = %{
+        users: [
+          %{name: "Alice", active: true},
+          %{name: "Bob", active: false}
+        ]
+      }
+
+      # Using query strings
+      assert Nested.get(data, Nested.key("users.0.name")) == "Alice"
+      assert Nested.get(data, Nested.key("users[active=true].name")) == "Alice"
+      assert Nested.get(data, Nested.key("users[active=false].name")) == "Bob"
+    end
+
+    test "integration with fetch/2" do
+      data = %{config: %{database: %{host: "localhost"}}}
+
+      assert Nested.fetch(data, Nested.key("config.database.host")) == {:ok, "localhost"}
+      assert Nested.fetch(data, Nested.key("config.missing.key")) == :error
+    end
+
+    test "integration with extract/2" do
+      data = %{
+        users: [
+          %{name: "Alice", skills: ["elixir", "js"]},
+          %{name: "Bob", skills: ["python", "go"]}
+        ]
+      }
+
+      result = Nested.extract(data, Nested.key("users[*].name"))
+      assert result == ["Alice", "Bob"]
+
+      result2 = Nested.extract(data, Nested.key("users[*].skills"))
+      assert result2 == [["elixir", "js"], ["python", "go"]]
+    end
+
+    test "works with string keys for JSON-like data" do
+      json_data = %{
+        "users" => [
+          %{"name" => "Alice", "active" => true},
+          %{"name" => "Bob", "active" => false}
+        ]
+      }
+
+      path = Nested.key("users.0.name", :string)
+      assert Nested.get(json_data, path) == "Alice"
+
+      filter_path = Nested.key("users[active=true].name", :string)
+      assert Nested.get(json_data, filter_path) == "Alice"
+    end
+  end
+
   # Edge cases and error handling
   describe "edge cases" do
     test "handles empty structures" do

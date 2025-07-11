@@ -3,13 +3,13 @@ defmodule Nested.MixProject do
 
   def project do
     [
-      app: :nested2,
-      version: "0.1.1",
+      app: :nestex,
+      version: "0.2.0",
       elixir: "~> 1.13",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       package: package(),
-      name: "Nested 2",
+      name: "Nestex",
       description: description(),
       source_url: "https://github.com/bluzky/skema",
       docs: docs()
