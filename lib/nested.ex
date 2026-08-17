@@ -279,6 +279,14 @@ defmodule Nested do
   @doc """
   Extract multiple values from nested data structures using pattern matching and wildcards.
 
+  > #### Deprecated {: .warning}
+  >
+  > For known/static data shapes, prefer plain `Enum` functions
+  > (`Enum.map/2`, `Enum.flat_map/2`) directly — they're simpler and more
+  > idiomatic. `extract/2` mainly earns its keep when the path itself is
+  > dynamic (e.g. built at runtime via `key/2`) or the data may be missing
+  > intermediate keys and you want `[]` instead of an exception.
+
   This function is powerful for collecting data from multiple locations in complex structures.
   Unlike `get/3` and `fetch/2` which return single values, `extract/2` always returns a list
   of all matching values.
@@ -367,6 +375,7 @@ defmodule Nested do
       #=> [["elixir", "postgres"], ["react", "typescript"], ["figma", "research"], ["photoshop", "illustration"]]
 
   """
+  @deprecated "Use Enum functions (e.g. Enum.map/2, Enum.flat_map/2) directly for known/static paths"
   @spec extract(map | list, list) :: list
   def extract(object, [key | tail]) when is_map(object) do
     case Map.fetch(object, key) do
@@ -625,6 +634,14 @@ defmodule Nested do
   while preserving special types like DateTime. It's useful for serialization,
   logging, or when you need plain data structures.
 
+  ## Parameters
+
+  - `struct` - The data structure to convert (struct, map, or list)
+  - `key_type` - How to normalize map keys (defaults to `:keep`):
+    - `:keep` - leave keys as they are
+    - `:atom` - convert all keys to atoms
+    - `:string` - convert all keys to strings
+
   ## Examples
 
       defmodule User do
@@ -652,6 +669,18 @@ defmodule Nested do
         ]
       }
 
+  ## Normalizing Keys
+
+      data = %{"name" => "Alice", "profile" => %{"age" => 30}}
+
+      Nested.to_map(data, :atom)
+      #=> %{name: "Alice", profile: %{age: 30}}
+
+      data = %{name: "Alice", profile: %{age: 30}}
+
+      Nested.to_map(data, :string)
+      #=> %{"name" => "Alice", "profile" => %{"age" => 30}}
+
   ## Preserved Types
 
   These special types are NOT converted to maps:
@@ -666,15 +695,30 @@ defmodule Nested do
   - Logging structured data without internal metadata
   - Converting Ecto schemas to plain maps
   - API response formatting
+  - Normalizing keys of data decoded from JSON (string keys) to atoms, or vice versa
 
   """
-  def to_map(struct) do
+  @spec to_map(any(), :keep | :atom | :string) :: any()
+  def to_map(struct, key_type \\ :keep)
+
+  def to_map(struct, key_type) when key_type in [:keep, :atom, :string] do
     traverse(struct, fn
       %type{} = value when type in @ignore_types -> {:skip, value}
       value when is_struct(value) -> {:next, Map.drop(value, [:__struct__, :__meta__])}
+      {key, value} -> {:next, {convert_key(key, key_type), value}}
       value -> {:next, value}
     end)
   end
+
+  def to_map(_struct, key_type) do
+    raise ArgumentError, "key_type must be :keep, :atom, or :string, got: #{inspect(key_type)}"
+  end
+
+  defp convert_key(key, :keep), do: key
+  defp convert_key(key, :atom) when is_atom(key), do: key
+  defp convert_key(key, :atom), do: key |> to_string() |> String.to_atom()
+  defp convert_key(key, :string) when is_binary(key), do: key
+  defp convert_key(key, :string), do: to_string(key)
 
   @doc """
   Replace values with `"***"` for keys that contain any of the specified keywords.
@@ -754,6 +798,63 @@ defmodule Nested do
       value ->
         {:next, value}
     end)
+  end
+
+  @doc """
+  Recursively trim string values and convert blank strings to `nil`.
+
+  This mirrors the "scrub" behavior common in web frameworks: whitespace-only
+  or empty string values (typically submitted through forms or query params)
+  are normalized to `nil` so presence validations behave consistently.
+  Non-string values, and the shape of the data (keys, list length), are left
+  untouched.
+
+  ## Examples
+
+      params = %{
+        "name" => "  Alice  ",
+        "nickname" => "   ",
+        "email" => "",
+        "tags" => ["ruby", "  ", ""],
+        "age" => 30
+      }
+
+      Nested.scrub_params(params)
+      #=> %{
+        "name" => "Alice",
+        "nickname" => nil,
+        "email" => nil,
+        "tags" => ["ruby", nil, nil],
+        "age" => 30
+      }
+
+  Combine with `clean_nil/1` to drop the resulting blank entries entirely:
+
+      params
+      |> Nested.scrub_params()
+      |> Nested.clean_nil()
+
+  ## Use Cases
+
+  - Normalizing form/query params before casting into a changeset
+  - Making blank-string and missing-key inputs equivalent for validation
+  - Cleaning up user-submitted text fields before further processing
+
+  """
+  @spec scrub_params(any()) :: any()
+  def scrub_params(object) do
+    traverse(object, fn
+      {key, value} when is_binary(value) -> {:next, {key, scrub_value(value)}}
+      value when is_binary(value) -> {:next, scrub_value(value)}
+      item -> item
+    end)
+  end
+
+  defp scrub_value(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
   end
 
   @doc """

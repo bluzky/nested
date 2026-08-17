@@ -261,6 +261,39 @@ defmodule NestedTest do
       result = Nested.to_map(data)
       assert result.created_at == now
     end
+
+    test "defaults to keeping keys as-is" do
+      data = %{"name" => "Alice", name2: "Bob"}
+      assert Nested.to_map(data) == data
+      assert Nested.to_map(data, :keep) == data
+    end
+
+    test "converts keys to atoms, recursively" do
+      data = %{"name" => "Alice", "profile" => %{"age" => 30}}
+
+      assert Nested.to_map(data, :atom) == %{name: "Alice", profile: %{age: 30}}
+    end
+
+    test "converts keys to strings, recursively" do
+      data = %{name: "Alice", profile: %{age: 30}}
+
+      assert Nested.to_map(data, :string) == %{"name" => "Alice", "profile" => %{"age" => 30}}
+    end
+
+    test "normalizes keys while converting nested structs" do
+      data = %NestedTest.Person{
+        name: "John",
+        address: %NestedTest.Address{street: "Main St", city: "NYC"}
+      }
+
+      result = Nested.to_map(data, :string)
+
+      assert result == %{"name" => "John", "address" => %{"street" => "Main St", "city" => "NYC"}}
+    end
+
+    test "raises ArgumentError for an invalid key_type" do
+      assert_raise ArgumentError, fn -> Nested.to_map(%{a: 1}, :invalid) end
+    end
   end
 
   describe "censor/2" do
@@ -301,6 +334,47 @@ defmodule NestedTest do
       result = Nested.censor(data, ["pass"])
 
       assert result == %{user_password: "***", password_reset: "***"}
+    end
+  end
+
+  describe "scrub_params/1" do
+    test "trims strings and converts blank strings to nil" do
+      params = %{
+        "name" => "  Alice  ",
+        "nickname" => "   ",
+        "email" => "",
+        "age" => 30
+      }
+
+      assert Nested.scrub_params(params) == %{
+               "name" => "Alice",
+               "nickname" => nil,
+               "email" => nil,
+               "age" => 30
+             }
+    end
+
+    test "recurses into nested maps and lists" do
+      params = %{
+        "user" => %{"name" => " Bob ", "bio" => ""},
+        "tags" => ["ruby", "  ", ""]
+      }
+
+      assert Nested.scrub_params(params) == %{
+               "user" => %{"name" => "Bob", "bio" => nil},
+               "tags" => ["ruby", nil, nil]
+             }
+    end
+
+    test "leaves non-string values untouched" do
+      params = %{count: 3, active: true, meta: nil}
+      assert Nested.scrub_params(params) == params
+    end
+
+    test "does not remove keys, only blanks their values" do
+      result = Nested.scrub_params(%{"email" => ""})
+      assert Map.has_key?(result, "email")
+      assert result["email"] == nil
     end
   end
 
